@@ -1,0 +1,24 @@
+:root{ --bg:#f4f7fb; --card:#ffffff; --text:#1f2937; --muted:#6b7280; --border:#e5e7eb; --primary:#2563eb; --sidebar:#0f172a; --soft:#f8fafc; }
+*{box-sizing:border-box}
+body{font-family:'Cairo',sans-serif; background:var(--bg); color:var(--text); margin:0; direction:rtl;}
+.page{display:flex; min-height:100vh;}
+.sidebar{width:280px; background:var(--sidebar); color:#fff; padding:24px 18px; display:flex; flex-direction:column; gap:18px;}
+.brand{display:flex; align-items:center; gap:12px;}
+.brand-logo{width:48px; height:48px; border-radius:14px; background:linear-gradient(135deg,#3b82f6,#8b5cf6); display:grid; place-items:center; font-weight:800;}
+.tab-btn{border:0; padding:12px 14px; border-radius:12px; background:rgba(255,255,255,.05); color:#e2e8f0; text-align:right; cursor:pointer;}
+.tab-btn.active{background:rgba(255,255,255,.14); color:#fff;}
+.content{flex:1; padding:24px;}
+.client-card,.panel{background:var(--card); border:1px solid var(--border); border-radius:18px; padding:18px; margin-bottom:18px;}
+.client-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:14px;}
+.info-box{padding:14px; border:1px solid var(--border); border-radius:14px; background:var(--soft);}
+.data-table{width:100%; border-collapse:collapse;}
+.data-table th,.data-table td{border-bottom:1px solid var(--border); padding:12px 10px; text-align:right;}
+.badge{padding:6px 10px; border-radius:999px; font-size:12px; font-weight:700;}
+.badge.success{background:#dcfce7;color:#166534}
+.badge.warning{background:#fef3c7;color:#92400e}
+.badge.info{background:#dbeafe;color:#1d4ed8}
+.field textarea{width:100%; border:1px solid var(--border); border-radius:12px; padding:11px 12px; min-height:110px;}
+.btn{border:0; border-radius:12px; padding:11px 16px; cursor:pointer;}
+.btn-primary{background:var(--primary); color:#fff;}
+.btn-soft{background:#eef2ff; color:#3730a3;}
+@media (max-width: 1024px){.page{flex-direction:column} .client-grid{grid-template-columns:1fr}}

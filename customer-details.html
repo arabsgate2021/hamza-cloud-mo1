@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>تفاصيل العميل | ASGate</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="customer-details.css">
+</head>
+<body onload="loadClientData()">
+  <div class="page">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo">A</div>
+        <div class="brand-text">
+          <h1>ASGate</h1>
+          <span>تفاصيل العميل</span>
+        </div>
+      </div>
+      <button class="back-btn" onclick="goBackAndFocus()">← العودة للعملاء</button>
+      <div class="menu">
+        <button class="tab-btn active" onclick="showTab('overview')">نظرة عامة</button>
+        <button class="tab-btn" onclick="showTab('orders')">الأوامر / الطلبات</button>
+        <button class="tab-btn" onclick="showTab('team')">فريق المتابعة</button>
+        <button class="tab-btn" onclick="showTab('notes')">الملاحظات</button>
+      </div>
+    </aside>
+
+    <main class="content">
+      <div class="topbar">
+        <h2 id="c-name">تفاصيل العميل</h2>
+        <p>معلومات العميل، السجل، والمتابعة في شاشة واحدة بشكل واضح وسريع.</p>
+      </div>
+
+      <section class="client-card" id="overviewTab">
+        <div class="client-grid">
+          <div class="info-box"><span>السجل التجاري 1</span><strong id="c-cr1">-</strong></div>
+          <div class="info-box"><span>السجل التجاري 2</span><strong id="c-cr2">-</strong></div>
+          <div class="info-box"><span>المدينة</span><strong id="c-city">-</strong></div>
+          <div class="info-box"><span>الحي</span><strong id="c-district">-</strong></div>
+          <div class="info-box"><span>المصدر</span><strong id="c-source">-</strong></div>
+          <div class="info-box"><span>المالك</span><strong id="c-owner">-</strong></div>
+        </div>
+      </section>
+
+      <section class="panel" id="ordersTab" style="display:none;">
+        <div class="panel-head">
+          <h3>الأوامر / الطلبات</h3>
+          <button class="btn btn-primary" onclick="addOrder()">+ إضافة طلب</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>التاريخ</th>
+                <th>العنوان</th>
+                <th>الحالة</th>
+                <th>الملاحظات</th>
+              </tr>
+            </thead>
+            <tbody id="contentBody">
+              <tr><td colspan="4" class="empty-state">لا توجد طلبات بعد.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" id="teamTab" style="display:none;">
+        <div class="panel-head">
+          <h3>فريق المتابعة</h3>
+          <button class="btn btn-primary" onclick="addManager()">+ إضافة مسؤول</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>المسؤول</th>
+                <th>الجوال</th>
+                <th>البريد</th>
+                <th>الأساسي</th>
+                <th>تاريخ الإضافة</th>
+                <th>إجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="managerTableBody">
+              <tr><td colspan="6" class="empty-state">لا يوجد أفراد متابعة بعد.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" id="notesTab" style="display:none;">
+        <div class="panel-head">
+          <h3>ملاحظات سريعة</h3>
+          <button class="btn btn-soft" onclick="clearNotes()">تفريغ</button>
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label>ملاحظة داخلية</label>
+            <textarea id="internalNote" placeholder="اكتب ملاحظة خاصة بالعميل..."></textarea>
+          </div>
+          <div class="field">
+            <label>معلومة مهمة</label>
+            <textarea id="importantNote" placeholder="سجل أهم نقطة أو تنبيه..."></textarea>
+          </div>
+        </div>
+        <div class="detail-toolbar" style="margin-top:14px;">
+          <button class="btn btn-primary" onclick="saveNotes()">حفظ الملاحظات</button>
+          <button class="btn btn-soft" onclick="markImportant()">تمييز كمهم</button>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="customer-details.js"></script>
+</body>
+</html>
