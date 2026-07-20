@@ -1,50 +1,27 @@
-// ملف: routes/visitRoutes.js
+// routes/visitRoutes.js
 const express = require('express');
 const router = express.Router();
-const Visit = require('../models/Visit'); // استدعاء النموذج الذي أنشأناه أعلاه
+const Visit = require('../models/Visit'); // تأكد أن مسار موديل قاعدة البيانات صحيح هنا
 
-// 1. جلب جميع الزيارات (GET)
-router.get('/', async (req, res) => {
+// 1. جلب جميع الزيارات (تم تعديله إلى /all ليطابق طلب الواجهة)
+router.get('/all', async (req, res) => {
     try {
-        const visits = await Visit.find();
-        res.status(200).json({ 
-            success: true, 
-            message: 'تم جلب الزيارات بنجاح', 
-            data: visits 
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        const visits = await Visit.find({}).sort({ visitDate: -1 });
+        res.json(visits);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
     }
 });
 
-// 2. إضافة زيارة جديدة (POST)
-router.post('/', async (req, res) => {
+// 2. مزامنة وحفظ كافة البيانات (استبدال التخزين المحلي)
+router.post('/sync', async (req, res) => {
     try {
-        const newVisit = new Visit(req.body);
-        const savedVisit = await newVisit.save();
-        res.status(201).json({ 
-            success: true, 
-            message: 'تم تسجيل الزيارة بنجاح', 
-            data: savedVisit 
-        });
-    } catch (error) {
-        res.status(400).json({ success: false, error: error.message });
-    }
-});
-
-// 3. جلب زيارة محددة بالـ ID (GET)
-router.get('/:id', async (req, res) => {
-    try {
-        const visit = await Visit.findById(req.params.id);
-        if (!visit) return res.status(404).json({ success: false, message: 'الزيارة غير موجودة' });
-        
-        res.status(200).json({ 
-            success: true, 
-            message: 'تم العثور على الزيارة',
-            data: visit 
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        // لمطابقة عمل localStorage: نقوم بحذف القديم وحفظ المصفوفة الجديدة القادمة من الواجهة
+        await Visit.deleteMany({}); 
+        const savedVisits = await Visit.insertMany(req.body);
+        res.status(200).json({ success: true, count: savedVisits.length });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
     }
 });
 
