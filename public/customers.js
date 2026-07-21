@@ -1,13 +1,10 @@
-// 1. استدعاء قاعدة البيانات من ملف الإعدادات المستقل
-import { db } from './firebase-config.js'; 
+/**
+ * إعدادات الاتصال بالسيرفر
+ * يمكنك تعديل API_BASE_URL حسب مسار السيرفر الخاص بك
+ * مثال: 'http://localhost:5000/api' أو '/api'
+ */
+const API_BASE_URL = '/api';
 
-// 2. استدعاء دوال الفايربيس المطلوبة للعمليات
-import { 
-  collection, addDoc, getDocs, doc, 
-  updateDoc, deleteDoc, query, orderBy, limit, arrayUnion 
-} from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-
-// عناصر واجهة المستخدم (DOM Elements)
 const tableBody = document.getElementById('tableBody');
 const logsBody = document.getElementById('activityList'); 
 const totalCustomers = document.getElementById('stat-total'); 
@@ -16,22 +13,55 @@ const todayCustomers = document.getElementById('stat-today');
 const searchInput = document.getElementById('searchInput');
 
 let searchTimeout;
-let allCustomersCache = []; // مصفوفة محلية لتخزين البيانات المسترجعة للسرعة والتصفية
+let cachedCustomers = []; // حفظ نسخة مؤقتة للبحث السريع
 
-// دالتان مساعدتان للتعامل مع النصوص والأمان
+/* =========================================
+   دوال الاتصال بالسيرفر (API Requests)
+========================================= */
+
+async function fetchCustomers() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/customers`);
+    if (!res.ok) throw new Error('فشل جلب بيانات العملاء من السيرفر');
+    const data = await res.json();
+    cachedCustomers = data;
+    return data;
+  } catch (err) {
+    console.error(err);
+    Swal.fire('خطأ', 'تعذر الاتصال بالسيرفر لجلب العملاء', 'error');
+    return [];
+  }
+}
+
+async function fetchLogs() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/logs`);
+    if (!res.ok) throw new Error('فشل جلب سجل النشاط من السيرفر');
+    return await res.json();
+  } catch (err) {
+    console.error(err);
+    return [];
+  }
+}
+
+/* =========================================
+   دوال التنسيق والمساعدة
+========================================= */
+
 function normalizeText(v) {
   return String(v || '').toLowerCase().trim();
 }
 
 function escapeHTML(str) {
-  return str.replace(/[&<>'"]/g, tag => ({
+  return String(str || '').replace(/[&<>'"]/g, tag => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
   }[tag]));
 }
 
 function badgeClass(status) {
   const s = normalizeText(status);
-  if (s.includes('جديد') || s.includes('مفتوح') || s.includes('نشط') || s.includes('مكتمل') || s.includes('تم')) return 'status-active';
+  if (s.includes('جديد') || s.includes('مفتوح')) return 'status-active';
+  if (s.includes('نشط') || s.includes('مكتمل') || s.includes('تم')) return 'status-active';
   if (s.includes('متابعة')) return 'status-med';
   if (s.includes('مغلق') || s.includes('ملغي')) return 'status-inactive';
   return 'status-small';
@@ -66,7 +96,10 @@ function getDisplayEmail(v) {
   return safe(v.email);
 }
 
-// عرض العملاء في الجدول
+/* =========================================
+   دوال العرض والواجهة (DOM Rendering)
+========================================= */
+
 function renderCustomers(list) {
   if (!tableBody) return;
   tableBody.innerHTML = '';
@@ -76,13 +109,13 @@ function renderCustomers(list) {
     return;
   }
 
-  list.forEach((v) => {
+  list.forEach((v, index) => {
     const classification = safe(v.classification || v.source || 'غير محدد');
     const tr = document.createElement('tr');
     tr.className = 'main-row';
     
     tr.innerHTML = `
-      <td><input type="checkbox" class="select-check" data-id="${v.id}"></td>
+      <td><input type="checkbox" class="select-check" data-code="${safe(v.code)}" data-index="${index}"></td>
       <td><a href="#" onclick="event.preventDefault(); window.location.href='customer-details.html?code=${v.code}'" class="code-link">${safe(v.code, '00001')}</a></td>
       <td><strong>${safe(v.comp)}</strong></td>
       <td>${safe(v.address || v.city)}</td>
@@ -96,7 +129,7 @@ function renderCustomers(list) {
       <td>${getDisplayEmail(v)}</td>
       <td>${safe(v.creationDate || v.date)}</td>
       <td><span class="${classBadgeColor(classification)}" style="padding: 2px 8px; border-radius: 4px;">${classification}</span></td>
-      <td><div class="notes-preview" onclick="openNoteModal('${v.id}'); event.stopPropagation()">${safe(v.notesText || v.lastNote || 'اضغط لإضافة ملاحظة')}</div></td>
+      <td><div class="notes-preview" onclick="openNoteModal(${index}); event.stopPropagation()">${safe(v.notesText || v.lastNote || 'اضغط لإضافة ملاحظة')}</div></td>
       <td><span class="${badgeClass(v.status)}" style="padding: 2px 8px; border-radius: 4px;">${safe(v.status, 'جديد')}</span></td>
       <td>${safe(v.owner)}</td>
     `;
@@ -113,7 +146,7 @@ function renderLogs(list) {
     return;
   }
 
-  list.forEach(log => {
+  list.slice(0, 20).forEach(log => {
     logsBody.innerHTML += `
       <div class="log-entry">
         <span class="log-timestamp"><i class="far fa-clock"></i> ${safe(log.date)}</span>
@@ -131,19 +164,18 @@ function updateStats(list) {
   const thisYear = now.getFullYear();
   const today = now.toISOString().slice(0, 10);
 
-  if(totalCustomers) totalCustomers.textContent = list.length;
-  
-  if(monthCustomers) monthCustomers.textContent = list.filter(v => {
+  if (totalCustomers) totalCustomers.textContent = list.length;
+  if (monthCustomers) monthCustomers.textContent = list.filter(v => {
     const dStr = v.creationDate || v.date || '';
-    if(dStr.includes('/')) {
+    if (dStr.includes('/')) {
         const parts = dStr.split('/');
-        return parseInt(parts[1])-1 === thisMonth && parseInt(parts[2]) === thisYear;
+        return parseInt(parts[1]) - 1 === thisMonth && parseInt(parts[2]) === thisYear;
     }
     const d = new Date(dStr);
     return !isNaN(d) && d.getMonth() === thisMonth && d.getFullYear() === thisYear;
   }).length;
   
-  if(todayCustomers) todayCustomers.textContent = list.filter(v => {
+  if (todayCustomers) todayCustomers.textContent = list.filter(v => {
     const d = String(v.creationDate || v.date || '');
     return d.includes(today) || d.includes(`${now.getDate()}`) || d.includes(`${now.getMonth() + 1}`);
   }).length;
@@ -153,7 +185,7 @@ function debouncedFilterTable() {
   clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => {
     const q = normalizeText(searchInput.value);
-    const filtered = allCustomersCache.filter(v => {
+    const filtered = cachedCustomers.filter(v => {
       const haystack = [
         v.code, v.comp, v.address, v.city, v.mgr, v.delegateName,
         v.mob, v.delegateMob, v.email, v.delegateEmail, v.status,
@@ -165,33 +197,33 @@ function debouncedFilterTable() {
   }, 300);
 }
 
+/* =========================================
+   دوال إضافة عميل جديد بالسيرفر
+========================================= */
+
 function openAddCustomerModal() {
-  const modal = document.getElementById('addCustomerModal');
-  if(modal) modal.style.display = 'flex';
+  document.getElementById('addCustomerModal').style.display = 'flex';
   
+  // توليد كود مبدئي وتاريخ اليوم
   const code = 'CUST-' + Math.floor(1000 + Math.random() * 9000);
-  const codeEl = document.getElementById('addCode');
-  if(codeEl) codeEl.value = code;
+  document.getElementById('addCode').value = code;
   
   const d = new Date();
   const todayStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
-  const dateEl = document.getElementById('addDate');
-  if(dateEl) dateEl.value = todayStr;
+  document.getElementById('addDate').value = todayStr;
   
   ['addComp', 'addCity', 'addAddress', 'addMainCR', 'addSubCR', 'addManager', 'addMob', 'addEmail', 'addCreator'].forEach(id => {
-     const el = document.getElementById(id);
-     if(el) el.value = '';
+     document.getElementById(id).value = '';
   });
 }
 
 function closeAddCustomerModal() {
-  const modal = document.getElementById('addCustomerModal');
-  if(modal) modal.style.display = 'none';
+  document.getElementById('addCustomerModal').style.display = 'none';
 }
 
 async function saveNewCustomer() {
   const comp = document.getElementById('addComp').value;
-  if(!comp.trim()) {
+  if (!comp.trim()) {
     Swal.fire('تنبيه', 'يرجى إدخال اسم الشركة', 'warning');
     return;
   }
@@ -212,95 +244,88 @@ async function saveNewCustomer() {
     owner: document.getElementById('addCreator').value,
     status: 'جديد',
     classification: 'صغير',
-    notesText: '',
-    notesHistory: [],
-    createdAtTimestamp: new Date()
+    notesText: ''
   };
 
   try {
-    await addDoc(collection(db, "customers"), newCust);
-
-    await addDoc(collection(db, "logs"), {
-      date: document.getElementById('addDate').value,
-      client: comp,
-      action: 'إضافة عميل',
-      notes: 'تمت إضافة العميل جديد',
-      createdAtTimestamp: new Date()
+    const res = await fetch(`${API_BASE_URL}/customers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newCust)
     });
 
+    if (!res.ok) throw new Error('فشل حفظ العميل في السيرفر');
+
     closeAddCustomerModal();
-    Swal.fire('نجاح', 'تم إضافة العميل بنجاح في قاعدة البيانات', 'success');
+    Swal.fire('نجاح', 'تم إضافة العميل بنجاح', 'success');
     
+    // إعادة تحميل البيانات من السيرفر للتحديث
     await loadSavedData();
-  } catch(error) {
-    console.error("Error saving document to Firebase: ", error);
-    Swal.fire('خطأ', 'فشل في حفظ البيانات، يرجى التحقق من القواعد أو الاتصال', 'error');
+  } catch (err) {
+    console.error(err);
+    Swal.fire('خطأ', 'حدث خطأ أثناء حفظ العميل في السيرفر', 'error');
   }
 }
 
-let currentNoteId = "";
-function openNoteModal(id) {
-    currentNoteId = id;
-    const modal = document.getElementById('noteModal');
-    if(modal) modal.style.display = 'flex';
-    
-    const customer = allCustomersCache.find(v => v.id === id);
-    const textarea = document.getElementById('modalTextArea');
-    if(textarea) textarea.value = '';
+/* =========================================
+   دوال الملاحظات عبر السيرفر
+========================================= */
+
+let currentNoteIndex = -1;
+
+function openNoteModal(index) {
+    currentNoteIndex = index;
+    document.getElementById('noteModal').style.display = 'flex';
+    const customer = cachedCustomers[index];
+    document.getElementById('modalTextArea').value = '';
     
     const historyLog = document.getElementById('historyLog');
-    if(historyLog) {
-        if (customer && customer.notesHistory && customer.notesHistory.length) {
-            historyLog.innerHTML = customer.notesHistory.map(n => `<div style="margin-bottom:8px; padding-bottom:8px; border-bottom:1px dashed #cbd5e1; font-size:11px;"><strong>${n.date}</strong>: ${n.text}</div>`).join('');
-        } else {
-            historyLog.innerHTML = '<div style="color:#64748b; font-size:11px; text-align:center;">لا يوجد سجل ملاحظات سابق.</div>';
-        }
+    if (customer && customer.notesHistory && customer.notesHistory.length) {
+        historyLog.innerHTML = customer.notesHistory.map(n => `<div style="margin-bottom:8px; padding-bottom:8px; border-bottom:1px dashed #cbd5e1; font-size:11px;"><strong>${n.date}</strong>: ${n.text}</div>`).join('');
+    } else {
+        historyLog.innerHTML = '<div style="color:#64748b; font-size:11px; text-align:center;">لا يوجد سجل ملاحظات سابق.</div>';
     }
 }
 
 function closeNote() {
-    const modal = document.getElementById('noteModal');
-    if(modal) modal.style.display = 'none';
-    currentNoteId = "";
+    document.getElementById('noteModal').style.display = 'none';
+    currentNoteIndex = -1;
 }
 
 async function saveNote() {
-    if (!currentNoteId) return;
-    const textarea = document.getElementById('modalTextArea');
-    const text = textarea ? textarea.value : '';
+    if (currentNoteIndex === -1) return;
+    const text = document.getElementById('modalTextArea').value;
     if (!text.trim()) {
         closeNote();
         return;
     }
 
+    const customer = cachedCustomers[currentNoteIndex];
     const d = new Date();
     const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
-    const customer = allCustomersCache.find(v => v.id === currentNoteId);
 
     try {
-        const customerDocRef = doc(db, "customers", currentNoteId);
-        
-        await updateDoc(customerDocRef, {
-            notesText: text,
-            notesHistory: arrayUnion({ date: dateStr, text: text })
+        const res = await fetch(`${API_BASE_URL}/customers/${customer.code}/notes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: dateStr, text: text })
         });
 
-        await addDoc(collection(db, "logs"), {
-            date: dateStr,
-            client: customer ? customer.comp : "غير معروف",
-            action: 'إضافة ملاحظة',
-            notes: text,
-            createdAtTimestamp: new Date()
-        });
+        if (!res.ok) throw new Error('فشل حفظ الملاحظة');
 
         closeNote();
         Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'تم حفظ الملاحظة', showConfirmButton: false, timer: 1500 });
+        
         await loadSavedData();
-    } catch(error) {
-        console.error("Error updating notes in Firebase: ", error);
-        Swal.fire('خطأ', 'فشل في تحديث الملاحظات', 'error');
+    } catch (err) {
+        console.error(err);
+        Swal.fire('خطأ', 'تعذر حفظ الملاحظة بالسيرفر', 'error');
     }
 }
+
+/* =========================================
+   الإجراءات الجماعية
+========================================= */
 
 function toggleDropdown(event, el) {
     event.stopPropagation();
@@ -319,47 +344,52 @@ function toggleAllCheckboxes(source) {
 }
 
 async function handleBulkAction(action) {
-    const selectedIds = Array.from(document.querySelectorAll('.select-check:checked')).map(cb => cb.getAttribute('data-id'));
-    if (!selectedIds.length) {
+    const selectedBoxes = Array.from(document.querySelectorAll('.select-check:checked'));
+    if (!selectedBoxes.length) {
         Swal.fire('تنبيه', 'يرجى تحديد عميل واحد على الأقل', 'info');
         return;
     }
+
+    const selectedCodes = selectedBoxes.map(cb => cb.getAttribute('data-code'));
     
     if (action === 'حذف') {
         Swal.fire({
             title: 'هل أنت متأكد؟',
-            text: "سيتم حذف المحددين نهائياً من قاعدة بيانات السيرفر ولن تتمكن من الاسترجاع!",
+            text: "لن تتمكن من التراجع عن هذا الإجراء!",
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#ef4444',
             cancelButtonColor: '#cbd5e1',
-            confirmButtonText: 'نعم، احذف نهائياً',
+            confirmButtonText: 'نعم، احذف',
             cancelButtonText: 'إلغاء'
         }).then(async (result) => {
             if (result.isConfirmed) {
                 try {
-                    for(const id of selectedIds) {
-                        await deleteDoc(doc(db, "customers", id));
-                    }
-                    Swal.fire('تم الحذف!', 'تم إزالة العملاء المحددين من السيرفر بنجاح.', 'success');
+                    const res = await fetch(`${API_BASE_URL}/customers/bulk-delete`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ codes: selectedCodes })
+                    });
+
+                    if (!res.ok) throw new Error('فشل الحذف من السيرفر');
+
+                    Swal.fire('تم الحذف!', 'تم حذف العملاء المحددين بنجاح.', 'success');
                     await loadSavedData();
-                } catch(error) {
-                    console.error("Error deleting docs: ", error);
-                    Swal.fire('خطأ', 'فشل في حذف بعض العناصر، تحقق من صلاحياتك', 'error');
+                } catch (err) {
+                    console.error(err);
+                    Swal.fire('خطأ', 'حدث خطأ أثناء إجراء الحذف بالسيرفر', 'error');
                 }
             }
         });
     } else {
-        Swal.fire('معلومة', `إجراء ${action} غير متاح في هذه النسخة حالياً.`, 'info');
+        Swal.fire('معلومة', `إجراء ${action} غير متاح حالياً.`, 'info');
     }
 }
 
 function toggleLogExpansion() {
     const section = document.getElementById('activityLogSection');
     const icon = document.querySelector('#toggleExpandBtn i');
-    if(!section || !icon) return;
-    
-    if(section.classList.contains('expanded')) {
+    if (section.classList.contains('expanded')) {
         section.classList.remove('expanded');
         icon.classList.remove('fa-compress-alt');
         icon.classList.add('fa-expand-alt');
@@ -370,44 +400,25 @@ function toggleLogExpansion() {
     }
 }
 
+/* =========================================
+   تحميل البيانات عند فتح الصفحة
+========================================= */
+
 async function loadSavedData() {
-  try {
-    const customersQuery = query(collection(db, "customers"), orderBy("createdAtTimestamp", "desc"));
-    const customersSnapshot = await getDocs(customersQuery);
-    
-    allCustomersCache = [];
-    customersSnapshot.forEach((doc) => {
-      allCustomersCache.push({ id: doc.id, ...doc.data() });
-    });
+  const [customers, logs] = await Promise.all([
+    fetchCustomers(),
+    fetchLogs()
+  ]);
 
-    const logsQuery = query(collection(db, "logs"), orderBy("createdAtTimestamp", "desc"), limit(20));
-    const logsSnapshot = await getDocs(logsQuery);
-    
-    let logsList = [];
-    logsSnapshot.forEach((doc) => {
-      logsList.push({ id: doc.id, ...doc.data() });
-    });
+  updateStats(customers);
+  renderCustomers(customers);
+  renderLogs(logs);
 
-    updateStats(allCustomersCache);
-    renderCustomers(allCustomersCache);
-    renderLogs(logsList);
-
-  } catch (error) {
-    console.error("Error loading data from Firestore: ", error);
+  if (searchInput) {
+    searchInput.removeEventListener('input', debouncedFilterTable);
+    searchInput.addEventListener('input', debouncedFilterTable);
   }
 }
 
 window.loadSavedData = loadSavedData;
-window.openAddCustomerModal = openAddCustomerModal;
-window.closeAddCustomerModal = closeAddCustomerModal;
-window.saveNewCustomer = saveNewCustomer;
-window.openNoteModal = openNoteModal;
-window.closeNote = closeNote;
-window.saveNote = saveNote;
-window.toggleDropdown = toggleDropdown;
-window.toggleAllCheckboxes = toggleAllCheckboxes;
-window.handleBulkAction = handleBulkAction;
-window.toggleLogExpansion = toggleLogExpansion;
-window.debouncedFilterTable = debouncedFilterTable;
-
 document.addEventListener('DOMContentLoaded', loadSavedData);

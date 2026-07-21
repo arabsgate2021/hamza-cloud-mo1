@@ -5,8 +5,10 @@ let currentActivePreview = null;
 let saveTimeout;
 let searchTimeout;
 
-// 🔴 أضف رابط قاعدة البيانات / الـ API الخاص بك هنا 🔴
-const API_BASE_URL = 'https://your-backend-domain.com/api'; 
+// 🟢 تم ضبط رابط الـ API ديناميكياً ليتعرف تلقائياً على النطاق والسيرفر الحالي
+const API_BASE_URL = window.location.origin.startsWith('http') 
+    ? `${window.location.origin}/api` 
+    : 'http://localhost:5000/api'; 
 
 /* ==========================================================
    2. الدالة الأساسية لبناء السطور المرحّلة (renderRow) 
