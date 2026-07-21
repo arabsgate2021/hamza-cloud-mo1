@@ -1,27 +1,25 @@
-// routes/visitRoutes.js
 const express = require('express');
 const router = express.Router();
-const Visit = require('../models/Visit'); // تأكد أن مسار موديل قاعدة البيانات صحيح هنا
+const Visit = require('../models/Visit');
 
-// 1. جلب جميع الزيارات (تم تعديله إلى /all ليطابق طلب الواجهة)
-router.get('/all', async (req, res) => {
+// جلب جميع الزيارات من السحابة
+router.get('/', async (req, res) => {
     try {
-        const visits = await Visit.find({}).sort({ visitDate: -1 });
+        const visits = await Visit.find().sort({ createdAt: -1 });
         res.json(visits);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        res.status(500).json({ error: err.message });
     }
 });
 
-// 2. مزامنة وحفظ كافة البيانات (استبدال التخزين المحلي)
-router.post('/sync', async (req, res) => {
+// إضافة زيارة جديدة
+router.post('/', async (req, res) => {
     try {
-        // لمطابقة عمل localStorage: نقوم بحذف القديم وحفظ المصفوفة الجديدة القادمة من الواجهة
-        await Visit.deleteMany({}); 
-        const savedVisits = await Visit.insertMany(req.body);
-        res.status(200).json({ success: true, count: savedVisits.length });
+        const newVisit = new Visit(req.body);
+        const savedVisit = await newVisit.save();
+        res.status(201).json(savedVisit);
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        res.status(400).json({ error: err.message });
     }
 });
 

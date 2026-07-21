@@ -9,39 +9,66 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const monthsNames = ["يناير", "فبراير", "مارس", "ابريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
 
-    // دالة مساعدة لوضع بيانات تجريبية في حال كانت قاعدة البيانات فارغة لتجربة الصفحة
-    function injectDummyDataIfEmpty() {
-        if (!localStorage.getItem('asgate_opportunities_v21')) {
-            const sampleOpps = [
-                { date: "2026-01-15", value: 14210, status: "محقق", region: "الرياض", supervisor: "أحمد", salesman: "محمد" },
-                { date: "2026-02-20", value: 790, status: "معلق", region: "جدة", supervisor: "خالد", salesman: "فهد" }
-            ];
-            const sampleVisits = [
-                { date: "2026-01-10", status: "ناجحة", region: "الرياض", supervisor: "أحمد", salesman: "محمد" },
-                { date: "2026-02-12", status: "مجدولة", region: "جدة", supervisor: "خالد", salesman: "فهد" }
-            ];
-            localStorage.setItem('asgate_opportunities_v21', JSON.stringify(sampleOpps));
-            localStorage.setItem('asgate_visits_data_v21', JSON.stringify(sampleVisits));
+    let cachedData = {
+        opportunities: [],
+        visits: []
+    };
+
+    // جلب البيانات من قاعدة البيانات السحابية
+    async function fetchCloudData() {
+        try {
+            const [oppsRes, visitsRes] = await Promise.all([
+                fetch('/api/opportunities'),
+                fetch('/api/visits')
+            ]);
+
+            let opps = await oppsRes.json();
+            let visits = await visitsRes.json();
+
+            // إذا كانت قاعدة البيانات جديدة وفارغة، يتم إضافة بيانات أولية سحابياً تلقائياً
+            if ((!opps || opps.length === 0) && (!visits || visits.length === 0)) {
+                await seedInitialData();
+                return fetchCloudData();
+            }
+
+            cachedData.opportunities = Array.isArray(opps) ? opps : [];
+            cachedData.visits = Array.isArray(visits) ? visits : [];
+
+            populateFilterOptions();
+            updateDashboard();
+        } catch (e) {
+            console.error("خطأ في جلب البيانات السحابية:", e);
         }
     }
 
-    function getRawData() {
-        injectDummyDataIfEmpty();
-        try {
-            const oppsData = localStorage.getItem('asgate_opportunities_v21');
-            const visitsData = localStorage.getItem('asgate_visits_data_v21');
-            return {
-                opportunities: oppsData ? JSON.parse(oppsData) : [],
-                visits: visitsData ? JSON.parse(visitsData) : []
-            };
-        } catch (e) {
-            console.error("خطأ في قراءة LocalStorage:", e);
-            return { opportunities: [], visits: [] };
+    async function seedInitialData() {
+        const sampleOpps = [
+            { date: "2026-01-15", value: 14210, status: "محقق", region: "الرياض", supervisor: "أحمد", salesman: "محمد" },
+            { date: "2026-02-20", value: 790, status: "معلق", region: "جدة", supervisor: "خالد", salesman: "فهد" }
+        ];
+        const sampleVisits = [
+            { date: "2026-01-10", status: "ناجحة", region: "الرياض", supervisor: "أحمد", salesman: "محمد" },
+            { date: "2026-02-12", status: "مجدولة", region: "جدة", supervisor: "خالد", salesman: "فهد" }
+        ];
+
+        for (const item of sampleOpps) {
+            await fetch('/api/opportunities', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(item)
+            });
+        }
+        for (const item of sampleVisits) {
+            await fetch('/api/visits', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(item)
+            });
         }
     }
 
     function populateFilterOptions() {
-        const data = getRawData();
+        const data = cachedData;
         
         const regions = new Set();
         const supervisors = new Set();
@@ -100,7 +127,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateDashboard() {
-        const data = getRawData();
+        const data = cachedData;
 
         const selectedYear = document.getElementById('filterYear')?.value || "2026";
         const selectedMonth = document.getElementById('filterMonth')?.value || "all";
@@ -253,7 +280,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const salesPercent = Math.round((sales / grandTotal) * 100) || 0;
         const pendingPercent = Math.round((pending / grandTotal) * 100) || 0;
 
-        // تم إصلاح المحددات هنا لتعمل على كل المتصفحات
         const achievedChartCanvas = document.getElementById('achievedChart');
         if (achievedChartCanvas) {
             const achievedText = achievedChartCanvas.parentNode.querySelector('.chart-percentage');
@@ -281,13 +307,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (gaugeChart) {
-            // تحديث منطق المؤشر ليكون نصف دائرة حقيقية تعكس الإنجاز وتغيير اللون ديناميكياً
             let remaining = 200 - gaugePercent;
-            let gaugeColor = '#ef4444'; // أحمر بشكل افتراضي
+            let gaugeColor = '#ef4444';
             
-            if (gaugePercent >= 100) gaugeColor = '#15803d'; // أخضر غامق إذا تجاوز الهدف
-            else if (gaugePercent >= 75) gaugeColor = '#4ade80'; // أخضر فاتح للممتاز
-            else if (gaugePercent >= 50) gaugeColor = '#fbbf24'; // أصفر للمتوسط
+            if (gaugePercent >= 100) gaugeColor = '#15803d';
+            else if (gaugePercent >= 75) gaugeColor = '#4ade80';
+            else if (gaugePercent >= 50) gaugeColor = '#fbbf24';
             
             gaugeChart.data.datasets[0].data = [gaugePercent, remaining > 0 ? remaining : 0];
             gaugeChart.data.datasets[0].backgroundColor = [gaugeColor, '#f1f5f9'];
@@ -335,18 +360,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     initCharts();
-    populateFilterOptions();
-    updateDashboard();
+    fetchCloudData();
 
-    // ربط فلاتر البحث بدالة التحديث
     document.querySelectorAll('.filter-input').forEach(select => {
         select.addEventListener('change', updateDashboard);
-    });
-
-    window.addEventListener('storage', function(e) {
-        if (e.key === 'asgate_opportunities_v21' || e.key === 'asgate_visits_data_v21') {
-            populateFilterOptions();
-            updateDashboard();
-        }
     });
 });
