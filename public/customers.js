@@ -1,7 +1,5 @@
 /**
  * إعدادات الاتصال بالسيرفر
- * يمكنك تعديل API_BASE_URL حسب مسار السيرفر الخاص بك
- * مثال: 'http://localhost:5000/api' أو '/api'
  */
 const API_BASE_URL = '/api';
 
@@ -204,7 +202,6 @@ function debouncedFilterTable() {
 function openAddCustomerModal() {
   document.getElementById('addCustomerModal').style.display = 'flex';
   
-  // توليد كود مبدئي وتاريخ اليوم
   const code = 'CUST-' + Math.floor(1000 + Math.random() * 9000);
   document.getElementById('addCode').value = code;
   
@@ -259,7 +256,6 @@ async function saveNewCustomer() {
     closeAddCustomerModal();
     Swal.fire('نجاح', 'تم إضافة العميل بنجاح', 'success');
     
-    // إعادة تحميل البيانات من السيرفر للتحديث
     await loadSavedData();
   } catch (err) {
     console.error(err);
